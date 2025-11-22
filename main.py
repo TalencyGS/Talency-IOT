@@ -30,40 +30,57 @@ def health_check():
 
 
 def chamar_huggingface(system_prompt: str, user_prompt: str) -> str:
-   headers = {
-       "Authorization": f"Bearer {HF_API_KEY}",
-       "Content-Type": "application/json",
-   }
+    headers = {
+        "Authorization": f"Bearer {HF_API_KEY}",
+        "Content-Type": "application/json",
+    }
 
-   body = {
-       "model": HF_MODEL,
-       "messages": [
-           {"role": "system", "content": system_prompt},
-           {"role": "user", "content": user_prompt},
-       ],
-       "max_tokens": 400,
-       "temperature": 0.7,
-   }
+    body = {
+        "model": HF_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "max_tokens": 400,
+        "temperature": 0.7,
+    }
 
-   try:
-       response = requests.post(HF_API_URL, headers=headers, json=body, timeout=60)
-       response.raise_for_status()
-       data = response.json()
+    print(f"\n--- TENTANDO CHAMAR MODELO: {HF_MODEL} ---")
+    
+    try:
+        response = requests.post(HF_API_URL, headers=headers, json=body, timeout=60)
+        
+        if response.status_code != 200:
+            print(f"❌ ERRO {response.status_code} vindo da Hugging Face:")
+            print(f"DETALHE DO ERRO: {response.text}")
+        
+        response.raise_for_status()
+        data = response.json()
 
-       choices = data.get("choices")
-       if not choices:
-           raise ValueError("Resposta sem choices")
+        choices = data.get("choices")
+        if not choices:
+            raise ValueError(f"Resposta sem choices. JSON recebido: {data}")
 
-       message = choices[0].get("message", {})
-       content = message.get("content")
-       if not content:
-           raise ValueError("Resposta sem content")
+        message = choices[0].get("message", {})
+        content = message.get("content")
+        if not content:
+            raise ValueError(f"Resposta sem content. JSON recebido: {data}")
 
-       return content
+        print("✅ Sucesso! Resposta gerada.")
+        return content
 
-   except Exception as e:
-       raise HTTPException(status_code=500, detail=f"Erro ao chamar Hugging Face: {e}")
+    except requests.exceptions.RequestException as e:
+        erro_detalhado = f"Erro HTTP: {str(e)}"
+        
+        if e.response is not None:
+            erro_detalhado += f" | RESPOSTA DA API: {e.response.text}"
+        
+        print(f"🚨 EXCEPTION CAPTURADA: {erro_detalhado}")
+        raise HTTPException(status_code=500, detail=erro_detalhado)
 
+    except Exception as e:
+        print(f"🚨 ERRO INTERNO: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro interno no Python: {str(e)}")
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
